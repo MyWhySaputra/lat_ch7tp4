@@ -152,6 +152,7 @@ async function Login(req, res) {
         const token = jwt.sign({
             id: checkUser.id,
             email: checkUser.email,
+            role: checkUser.role
         }, process.env.SECRET_KEY,
             // { expiresIn: '24h' }
         );
@@ -205,9 +206,62 @@ async function updateProfile(req, res) {
     }
 }
 
+async function blastEmail(req, res) {
+    
+    const role = req.user.role
+
+    if (role !== 'ADMIN') {
+        let resp = ResponseTemplate(null, 'anda bukan admin', null, 403)
+        res.status(403).json(resp)
+        return
+    }
+
+    try {
+
+        const user = await prisma.user.findMany({
+            where: {
+                role: 'USER'
+            },
+            select: {
+                email: true
+            }
+        })
+        
+        const emails = users.map((user) => user.email)
+
+        await sendBulkEmails(emails)
+
+        let emailContent = `
+        <h2>Subject Email</h2>
+        <p>Isi pesan email yang ingin Anda kirim ke pengguna.</p>
+        `
+
+        for (const email of emails) {
+            let mailOptions = {
+            from: process.env.EMAIL_SMTP,
+            to: email,
+            subject: 'Promo',
+            html: emailContent,
+            }
+
+            await transporter.sendMail(mailOptions)
+        }
+
+        let resp = ResponseTemplate(user, 'success', null, 200)
+        res.status(200).json(resp)
+        return
+
+    } catch (error) {
+        let resp = ResponseTemplate(null, 'internal server error', error, 500)
+        res.status(500).json(resp)
+        return
+    }
+}
+
 module.exports = {
     Create,
     verifyEmail,
     Login,
-    updateProfile
+    updateProfile,
+    blastEmail
 }
